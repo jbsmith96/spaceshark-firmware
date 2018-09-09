@@ -51,7 +51,7 @@ void setup()
     servo_alt.attach(A4);
     stepper_az.connectToPins(MOTOR_IN1_PIN, MOTOR_IN2_PIN, MOTOR_IN3_PIN, MOTOR_IN4_PIN);
     stepper_az.setSpeedInStepsPerSecond(128);
-    stepper_az.setAccelerationInStepsPerSecondPerSecond(64);
+    stepper_az.setAccelerationInStepsPerSecondPerSecond(256);
 
     Particle.function("point_alt_az", point_alt_az);
     Particle.function("track_alt", track_alt);
@@ -65,8 +65,8 @@ void setup()
 
 void loop()
 {
-    optoInt_Val = analogRead(A0);
-    Serial.println(optoInt_Val);
+
+
     if (hasHomed == true)
     {
       // This is the main loop, which never stops updating the pointning angles
@@ -77,18 +77,25 @@ void loop()
     }
     else
     {
-
+      optoInt_Val = analogRead(A0);
+      Serial.println(optoInt_Val);
+      servo_alt.write(0);
       if (optoInt_Val <= 1000)
       {
+        stepper_az.setSpeedInStepsPerSecond(128);
+        stepper_az.setAccelerationInStepsPerSecondPerSecond(128);
+        stepper_az.disableMotor();
+
         hasHomed = true;
       }
       else
       {
         signed int x;
-        x = 32;
-
+        x = -64;
+        stepper_az.setSpeedInStepsPerSecond(128);
+        stepper_az.setAccelerationInStepsPerSecondPerSecond(512);
         stepper_az.moveRelativeInSteps(x);
-        //hasHomed = true;
+
       }
       //delay(5);
     }
@@ -146,16 +153,18 @@ int set_pos(float alt, float az)
     if (diff_move != 0){
       Serial.println(diff_move);
     }
-    // if (diff_move > 1024){
-    //    diff_move = 2048 - diff_move;
-    //    diff_move = diff_move * -1;
-    //  }
-    // if (diff_move < 1024){
-    //   diff_move = 2048 + diff_move;
-    // }
-
-    stepper_az.moveRelativeInSteps(diff_move);
-    stepper_pos = posVal_servo_az;
+    if (diff_move > 1024){
+       diff_move = 2048 - diff_move;
+       diff_move = diff_move * -1;
+     }
+    if (diff_move < -1024){
+      diff_move = 2048 + diff_move;
+    }
+    if (diff_move != 0){
+      stepper_az.moveRelativeInSteps(diff_move);
+      stepper_pos = posVal_servo_az;
+      stepper_az.disableMotor();
+    }
 
 
     return 0;
