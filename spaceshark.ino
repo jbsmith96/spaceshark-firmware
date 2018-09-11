@@ -31,8 +31,8 @@ float stepper_pos = 0;
 // but will be slightly off. These need to be found empirically, e.g. by
 // setting the initial pointing to the min and max alt/az angles and then
 // nudging these limits either side of their nominal values.
-const float limit_alt_lo = 103.0; // Nominally 90.0
-const float limit_alt_hi = 9.0;   // Nominally 0.0
+const float limit_alt_lo = 0; // Nominally 90.0
+const float limit_alt_hi = 180;   // Nominally 0.0
 const float limit_az_lo = 0;   // Nominally 0.0
 const float limit_az_hi = 2048;  // Nominally 360.0
 
@@ -43,7 +43,7 @@ float trackRate_alt = 0.0;  // in degrees per second
 float trackRate_az = 0.0;   // in degrees per second
 
 int optoInt_Val = 0;
-bool hasHomed = false;
+bool hasHomed = true;
 
 void setup()
 {
@@ -69,11 +69,12 @@ void loop()
 
     if (hasHomed == true)
     {
-      // This is the main loop, which never stops updating the pointning angles
-      // based on the current tracking rate.
+      //This is the main loop, which never stops updating the pointning angles
+      //based on the current tracking rate.
       update_pointing();
       set_pos(posVal_sky_alt, posVal_sky_az);
       delay(50);
+
     }
     else
     {
@@ -143,29 +144,28 @@ int set_pos(float alt, float az)
     // Take current pointing angles, convert them, and move motors:
     float posVal_servo_alt = convert_alt(posVal_sky_alt);
     float posVal_servo_az = convert_az(posVal_sky_az);
-    servo_alt.write(posVal_servo_alt);
+
 
     //float posVal_servo_az_Steps = posVal_servo_az*2048/360;
     float diff_move = stepper_pos- posVal_servo_az;
 
 
+    // if (diff_move > 1024){
+    //    diff_move = 2048 - diff_move;
+    //    diff_move = diff_move * -1;
+    //  }
+    // if (diff_move < -1024){
+    //   diff_move = 2048 + diff_move;
+    // }
+    if (diff_move != 0){
+      Serial.println(alt);
+      Serial.println(az);
 
-    if (diff_move != 0){
-      Serial.println(diff_move);
-    }
-    if (diff_move > 1024){
-       diff_move = 2048 - diff_move;
-       diff_move = diff_move * -1;
-     }
-    if (diff_move < -1024){
-      diff_move = 2048 + diff_move;
-    }
-    if (diff_move != 0){
-      stepper_az.moveRelativeInSteps(diff_move);
+      stepper_az.moveRelativeInSteps(-1*diff_move);
       stepper_pos = posVal_servo_az;
       stepper_az.disableMotor();
     }
-
+    servo_alt.write(posVal_servo_alt);
 
     return 0;
 }
