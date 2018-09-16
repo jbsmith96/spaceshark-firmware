@@ -22,8 +22,8 @@ TinyStepper_28BYJ_48 stepper_az;
 float lastUpdate_alt = millis();
 float lastUpdate_az = millis();
 
-float stepper_pos = 0;
 
+float stepperPos_deg = 0;
 // The following values are particular to the hardware. Every servo motor is
 // a bit different, so the alt and az motors need to be calibrated for their
 // maximum and minimum angles. The values below are the ones given to the servo
@@ -43,29 +43,27 @@ float trackRate_alt = 0.0;  // in degrees per second
 float trackRate_az = 0.0;   // in degrees per second
 
 int optoInt_Val = 0;
-bool hasHomed = true;
+bool hasHomed = false;
 
 void setup()
 {
-    // Define servo output pins and register cloud functions:
+    // Define IO pins and register cloud functions:
+    pinMode(A0,INPUT);
     servo_alt.attach(A4);
     stepper_az.connectToPins(MOTOR_IN1_PIN, MOTOR_IN2_PIN, MOTOR_IN3_PIN, MOTOR_IN4_PIN);
-    stepper_az.setSpeedInStepsPerSecond(128);
-    stepper_az.setAccelerationInStepsPerSecondPerSecond(256);
 
     Particle.function("point_alt_az", point_alt_az);
     Particle.function("track_alt", track_alt);
     Particle.function("track_az", track_az);
     Serial.begin(9600);
-    pinMode(D7,OUTPUT);
-    pinMode(A0,INPUT);
+
 
 }
 
-
+int counter = 0;
+signed int x = 0;
 void loop()
 {
-
 
     if (hasHomed == true)
     {
@@ -80,23 +78,31 @@ void loop()
     {
       optoInt_Val = analogRead(A0);
       Serial.println(optoInt_Val);
-      servo_alt.write(0);
-      if (optoInt_Val <= 1000)
+
+      if (optoInt_Val <= 3800)
       {
         stepper_az.setSpeedInStepsPerSecond(128);
         stepper_az.setAccelerationInStepsPerSecondPerSecond(128);
         stepper_az.disableMotor();
 
         hasHomed = true;
+        counter = 0;
       }
       else
       {
-        signed int x;
-        x = -64;
-        stepper_az.setSpeedInStepsPerSecond(128);
-        stepper_az.setAccelerationInStepsPerSecondPerSecond(512);
-        stepper_az.moveRelativeInSteps(x);
+        if (counter>1024)
+        {
+          x = -64;
+        }
+        else
+        {
+          x = 64;
+        }
 
+        stepper_az.setSpeedInStepsPerSecond(128);
+        stepper_az.setAccelerationInStepsPerSecondPerSecond(4096);
+        stepper_az.moveRelativeInSteps(x);
+        counter += 64;
       }
       //delay(5);
     }
@@ -105,7 +111,7 @@ void loop()
 void update_pointing()
 {
     // Change the current pointing angles based on the current tracking rates
-    if (trackRate_alt > 0)
+    if (trackRate_alt != 0)
     {
         float now = millis();
         float elapsedTime_alt = now - lastUpdate_alt;
@@ -121,7 +127,7 @@ void update_pointing()
         posVal_sky_alt = posVal_sky_alt + 0;
     }
 
-    if (trackRate_az > 0)
+    if (trackRate_az != 0)
     {
         float now = millis();
         float elapsedTime_az = now - lastUpdate_az;
@@ -138,33 +144,49 @@ void update_pointing()
     }
 }
 
-
+float diff_move = 0;
 int set_pos(float alt, float az)
 {
-    // Take current pointing angles, convert them, and move motors:
-    float posVal_servo_alt = convert_alt(posVal_sky_alt);
-    float posVal_servo_az = convert_az(posVal_sky_az);
-
-
-    //float posVal_servo_az_Steps = posVal_servo_az*2048/360;
-    float diff_move = stepper_pos- posVal_servo_az;
-
-
-    // if (diff_move > 1024){
-    //    diff_move = 2048 - diff_move;
-    //    diff_move = diff_move * -1;
-    //  }
-    // if (diff_move < -1024){
-    //   diff_move = 2048 + diff_move;
-    // }
-    if (diff_move != 0){
-      Serial.println(alt);
-      Serial.println(az);
-
-      stepper_az.moveRelativeInSteps(-1*diff_move);
-      stepper_pos = posVal_servo_az;
-      stepper_az.disableMotor();
+    float theta = 0;
+    float move = 0;
+    if (stepperPos_deg > posVal_sky_az)
+    {
+      theta = posVal_sky_az + 360 - stepperPos_deg;
     }
+    else if (posVal_sky_az > stepperPos_deg)
+    {
+      theta = -1*(stepperPos_deg + 360 - posVal_sky_az);
+    }
+
+
+    if (theta+stepperPos_deg > 360)
+    {
+      move = -1 * (360 - theta);
+    }
+    else if (theta+stepperPos_deg < 0)
+    {
+      move = 360 + theta;
+    }
+    else
+    {
+      move = theta;
+    }
+    if (abs(move) > 0)
+    {
+
+      // Take current pointing angles, convert them, and move motors:
+      float posVal_servo_alt = convert_alt(posVal_sky_alt);
+      float posVal_servo_az = convert_az(move);
+      Serial.println(stepperPos_deg);
+      Serial.println(posVal_sky_az);
+      Serial.println(move);
+
+      stepper_az.moveRelativeInSteps(posVal_servo_az);
+
+      stepperPos_deg = posVal_sky_az;
+    }
+
+    float posVal_servo_alt = convert_alt(posVal_sky_alt);
     servo_alt.write(posVal_servo_alt);
 
     return 0;
@@ -190,10 +212,10 @@ float sky_to_servo(
     float servo_limit_lo,
     float servo_limit_hi)
 {
-    if (sky < sky_min)
-        return sky_min;
-    if (sky > sky_max)
-        return sky_max;
+    // if (sky < sky_min)
+    //     return sky_min;
+    // if (sky > sky_max)
+    //     return sky_max;
     float scale = (sky-sky_min) / (sky_max-sky_min);
 
     return scale * (servo_limit_hi - servo_limit_lo) + servo_limit_lo;
