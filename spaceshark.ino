@@ -1,7 +1,7 @@
 // Space Shark microcontroller firmware for Particle Photon
 // See project pages at http://github.com/spaceshark
 #include "TinyStepper_28BYJ_48.h"
-
+#include <math.h>
 // Define stepper motor pin connections
 const int MOTOR_IN1_PIN = 1;
 const int MOTOR_IN2_PIN = 2;
@@ -23,7 +23,7 @@ float lastUpdate_alt = millis();
 float lastUpdate_az = millis();
 
 
-float stepperPos_deg = 0;
+
 // The following values are particular to the hardware. Every servo motor is
 // a bit different, so the alt and az motors need to be calibrated for their
 // maximum and minimum angles. The values below are the ones given to the servo
@@ -42,6 +42,10 @@ float posVal_sky_az = 0.0;  // 0 degrees is north, 90 degrees is east
 float trackRate_alt = 0.0;  // in degrees per second
 float trackRate_az = 0.0;   // in degrees per second
 
+//
+float stepperPos_deg = 0;
+
+// Set homing inputs and variables
 int optoInt_Val = 0;
 bool hasHomed = false;
 
@@ -147,8 +151,40 @@ void update_pointing()
 float diff_move = 0;
 int set_pos(float alt, float az)
 {
-    float theta = 0;
     float move = 0;
+    move = get_stepper_move();
+    float posVal_servo_alt = convert_alt(posVal_sky_alt);
+    float posVal_servo_az = convert_az(move);
+
+    if (fabs(posVal_servo_az) > 1)
+    {
+
+      // Take current pointing angles, convert them, and move motors:
+
+      Serial.println(stepperPos_deg);
+      Serial.println(posVal_sky_az);
+      Serial.println(move);
+
+      stepper_az.moveRelativeInSteps(posVal_servo_az);
+      stepper_az.disableMotor();
+      stepperPos_deg = posVal_sky_az;
+    }
+    else
+    {
+
+      Serial.println(posVal_servo_az);
+    }
+
+
+    servo_alt.write(posVal_servo_alt);
+
+    return 0;
+}
+
+float get_stepper_move()
+{
+    float move = 0;
+    float theta = 0;
     if (stepperPos_deg > posVal_sky_az)
     {
       theta = posVal_sky_az + 360 - stepperPos_deg;
@@ -171,25 +207,7 @@ int set_pos(float alt, float az)
     {
       move = theta;
     }
-    if (abs(move) > 0)
-    {
-
-      // Take current pointing angles, convert them, and move motors:
-      float posVal_servo_alt = convert_alt(posVal_sky_alt);
-      float posVal_servo_az = convert_az(move);
-      Serial.println(stepperPos_deg);
-      Serial.println(posVal_sky_az);
-      Serial.println(move);
-
-      stepper_az.moveRelativeInSteps(posVal_servo_az);
-
-      stepperPos_deg = posVal_sky_az;
-    }
-
-    float posVal_servo_alt = convert_alt(posVal_sky_alt);
-    servo_alt.write(posVal_servo_alt);
-
-    return 0;
+    return move;
 }
 
 
