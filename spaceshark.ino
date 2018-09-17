@@ -154,9 +154,9 @@ int set_pos(float alt, float az)
     float move = 0;
     move = get_stepper_move();
     float posVal_servo_alt = convert_alt(posVal_sky_alt);
-    float posVal_servo_az = convert_az(move);
+    float posVal_stepper_az = convert_az(move);
 
-    if (fabs(posVal_servo_az) > 1)
+    if (fabs(posVal_stepper_az) > 1)
     {
 
       // Take current pointing angles, convert them, and move motors:
@@ -165,14 +165,14 @@ int set_pos(float alt, float az)
       Serial.println(posVal_sky_az);
       Serial.println(move);
 
-      stepper_az.moveRelativeInSteps(posVal_servo_az);
+      stepper_az.moveRelativeInSteps(posVal_stepper_az);
       stepper_az.disableMotor();
       stepperPos_deg = posVal_sky_az;
     }
     else
     {
 
-      Serial.println(posVal_servo_az);
+      Serial.println(posVal_stepper_az);
     }
 
 
