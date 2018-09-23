@@ -3,10 +3,10 @@
 #include "TinyStepper_28BYJ_48.h"
 #include <math.h>
 // Define stepper motor pin connections
-const int MOTOR_IN1_PIN = 1;
-const int MOTOR_IN2_PIN = 2;
-const int MOTOR_IN3_PIN = 3;
-const int MOTOR_IN4_PIN = 4;
+const int MOTOR_IN1_PIN = 0;
+const int MOTOR_IN2_PIN = 1;
+const int MOTOR_IN3_PIN = 2;
+const int MOTOR_IN4_PIN = 3;
 
 
 // Constant values defining the value ranges for the alt-az coordinate system:
@@ -21,7 +21,7 @@ TinyStepper_28BYJ_48 stepper_az;
 // These are used to track how long ago each motor had its pointing updated:
 float lastUpdate_alt = millis();
 float lastUpdate_az = millis();
-
+float lastUpdate_sys = millis();
 
 
 // The following values are particular to the hardware. Every servo motor is
@@ -52,8 +52,8 @@ bool hasHomed = false;
 void setup()
 {
     // Define IO pins and register cloud functions:
-    pinMode(A0,INPUT);
-    servo_alt.attach(A4);
+    pinMode(A1,INPUT);
+    servo_alt.attach(A5);
     stepper_az.connectToPins(MOTOR_IN1_PIN, MOTOR_IN2_PIN, MOTOR_IN3_PIN, MOTOR_IN4_PIN);
 
     Particle.function("point_alt_az", point_alt_az);
@@ -68,21 +68,24 @@ int counter = 0;
 signed int x = 0;
 void loop()
 {
-
     if (hasHomed == true)
     {
       //This is the main loop, which never stops updating the pointning angles
       //based on the current tracking rate.
-      update_pointing();
-      set_pos(posVal_sky_alt, posVal_sky_az);
-      delay(50);
 
+      float now = millis();
+      if ((now - lastUpdate_sys) > 1000)
+      {
+        lastUpdate_sys = now;
+        update_pointing();
+        set_pos(posVal_sky_alt, posVal_sky_az);
+      }
     }
     else
     {
-      optoInt_Val = analogRead(A0);
+      optoInt_Val = analogRead(A1);
       Serial.println(optoInt_Val);
-
+      //optoInt_Val = 4096;
       if (optoInt_Val <= 3800)
       {
         stepper_az.setSpeedInStepsPerSecond(128);
@@ -169,13 +172,6 @@ int set_pos(float alt, float az)
       stepper_az.disableMotor();
       stepperPos_deg = posVal_sky_az;
     }
-    else
-    {
-
-      Serial.println(posVal_stepper_az);
-    }
-
-
     servo_alt.write(posVal_servo_alt);
 
     return 0;
@@ -220,7 +216,7 @@ float convert_alt(float alt)
 
 float convert_az(float az)
 {
-    return sky_to_servo(az, az_min, az_max, limit_az_lo, limit_az_hi);
+    return sky_to_stepper(az, az_min, az_max, limit_az_lo, limit_az_hi);
 }
 
 float sky_to_servo(
@@ -230,12 +226,23 @@ float sky_to_servo(
     float servo_limit_lo,
     float servo_limit_hi)
 {
-    // if (sky < sky_min)
-    //     return sky_min;
-    // if (sky > sky_max)
-    //     return sky_max;
+    if (sky < sky_min)
+        return sky_min;
+    if (sky > sky_max)
+        return sky_max;
     float scale = (sky-sky_min) / (sky_max-sky_min);
 
+    return scale * (servo_limit_hi - servo_limit_lo) + servo_limit_lo;
+}
+
+float sky_to_stepper(
+    float sky,
+    float sky_min,
+    float sky_max,
+    float servo_limit_lo,
+    float servo_limit_hi)
+{
+    float scale = (sky-sky_min) / (sky_max-sky_min);
     return scale * (servo_limit_hi - servo_limit_lo) + servo_limit_lo;
 }
 
