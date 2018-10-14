@@ -1,8 +1,11 @@
+// library to move the stepper motor
 // Space Shark microcontroller firmware for Particle Photon
 // See project pages at http://github.com/spaceshark
 #include "TinyStepper_28BYJ_48.h"
 #include <math.h>
-// Define stepper motor pin connections
+
+// Define stepper motor pin connections, these are the digital pins
+// on the Particle Photon to which stepper motor will be connected.
 const int MOTOR_IN1_PIN = 0;
 const int MOTOR_IN2_PIN = 1;
 const int MOTOR_IN3_PIN = 2;
@@ -10,14 +13,17 @@ const int MOTOR_IN4_PIN = 3;
 
 
 // Constant values defining the value ranges for the alt-az coordinate system:
+// A normal servo only rotates from +90 degrees to -90 degrees a total of 180 degrees
+// All stepper motor moves from 0 to 360 degrees.
 const float alt_min = -90.0;
 const float alt_max = 90.0;
 const float az_min = 0.0;
 const float az_max = 360.0;
 
-// Create servo motor instances:
+// Create servo and stepper motor instances:
 Servo servo_alt;
 TinyStepper_28BYJ_48 stepper_az;
+
 // These are used to track how long ago each motor had its pointing updated:
 float lastUpdate_alt = millis();
 float lastUpdate_az = millis();
@@ -52,7 +58,7 @@ bool hasHomed = false;
 void setup()
 {
     // Define IO pins and register cloud functions:
-    pinMode(A1,INPUT);
+    pinMode(A0,INPUT);
     servo_alt.attach(A5);
     stepper_az.connectToPins(MOTOR_IN1_PIN, MOTOR_IN2_PIN, MOTOR_IN3_PIN, MOTOR_IN4_PIN);
 
@@ -68,7 +74,7 @@ int counter = 0;
 signed int x = 0;
 void loop()
 {
-    if (hasHomed == true)
+    if (hasHomed == true)  // checking if the device is already in home position
     {
       //This is the main loop, which never stops updating the pointning angles
       //based on the current tracking rate.
@@ -83,13 +89,19 @@ void loop()
     }
     else
     {
-      optoInt_Val = analogRead(A1);
+      // Read the value at opto interrupter (min: 0, max: 4096)
+      optoInt_Val = analogRead(A0);
       Serial.println(optoInt_Val);
-      //optoInt_Val = 4096;
+      // Check if the opto-interruptor has been triggered (when it
+      // drops below 3800, and max value is 4096)
       if (optoInt_Val <= 3800)
       {
+        // Stepper motor has homed, reset speed and acceleration to slower
+        // settings and exit homing sequence
         stepper_az.setSpeedInStepsPerSecond(128);
         stepper_az.setAccelerationInStepsPerSecondPerSecond(128);
+
+        // Disable the motor after homing to avoid overheating/stalling the motor
         stepper_az.disableMotor();
 
         hasHomed = true;
@@ -97,9 +109,12 @@ void loop()
       }
       else
       {
+      // We need to home the stepper motor, so move it in 64 step increments
+      // in one direction for 180 degrees, then go the other direction.
+      // This is to avoid tangling the wires (it homes in the shortest direction)
         if (counter>1024)
         {
-          x = -64;
+          x = -64 ;
         }
         else
         {
@@ -111,13 +126,16 @@ void loop()
         stepper_az.moveRelativeInSteps(x);
         counter += 64;
       }
-      //delay(5);
     }
 }
 
 void update_pointing()
 {
     // Change the current pointing angles based on the current tracking rates
+    // We are taking the angular velocity and multiplying with time to get the new angle
+    // and updating the current altitude or azimuthal angle to the new altitude
+    // or azimuthal angle respectively
+
     if (trackRate_alt != 0)
     {
         float now = millis();
@@ -177,10 +195,17 @@ int set_pos(float alt, float az)
     return 0;
 }
 
+
 float get_stepper_move()
 {
-    float move = 0;
-    float theta = 0;
+    // get_stepper_move() computes the required move (in degrees) that the
+    // stepper motor should take to go from current position (stepperPos_deg) to
+    // the desired position (posVal_sky_az), without going past the opto-interruptor
+    float move = 0;  // actual move for stepper motor to take
+    float theta = 0; // angular distance between current pos and desired
+
+    // First, compute theta, the angular distance to our desired move
+    // There are two cases to consider so that we get the sign correct
     if (stepperPos_deg > posVal_sky_az)
     {
       theta = posVal_sky_az + 360 - stepperPos_deg;
@@ -190,7 +215,10 @@ float get_stepper_move()
       theta = -1*(stepperPos_deg + 360 - posVal_sky_az);
     }
 
-
+    // Given theta, we need to ensure moving theta degrees will not
+    // go below 0 or above 360 degrees (either of which will cross the
+    // stepper motor). This logic will check the two conditions (0 or 360)
+    // and reverse theta if necessary
     if (theta+stepperPos_deg > 360)
     {
       move = -1 * (360 - theta);
@@ -203,12 +231,16 @@ float get_stepper_move()
     {
       move = theta;
     }
-    return move;
+
+    // This depends on how the stepper motor is wired, and what is defined
+    // as clockwise and counterclockwise. In our case, we need to multiply by
+    // -1 to ensure it moves the right direction.
+    return -1*move;
 }
 
 
 // The following functions convert 'sky' coordinates to 'servo' coordinates,
-// which account for the motor calibration offsets
+// i.e. converting from degrees into steps or servo position
 float convert_alt(float alt)
 {
     return sky_to_servo(alt, alt_min, alt_max, limit_alt_lo, limit_alt_hi);
